@@ -1,50 +1,12 @@
 #!/usr/local/bin/lua
 
-Account = {balance = 0}
-
-function Account.withdraw(v)
-    Account.balance = Account.balance - v
-end
-
-print(Account.withdraw(100.00))
-
--- 一个简单实例
--- Meta class
-Rectangle = {area = 0, length = 0, breadth = 0}
-
--- 派生类的方法 new
-function Rectangle:new(o, length, breadth)
-    o = o or {}
-    setmetatable(o, self)
-    self.__index = self
-    self.length = length or 0
-    self.breadth = breadth or 0
-    self.area = length * breadth
-    return o
-end
-
--- 派生类的方法 printArea
-function Rectangle:printArea( ... )
-    print("矩形面积为", self.area)
-end
-
---创建对象
-r = Rectangle:new(nil, 10, 20)
---访问属性
-print(r.length)
---访问成员函数
-print(r:printArea())
-print('------------------------------------')
-
 --完整实例
 -- Meta class
 Shape = {area = 0}
 
 -- 基础类方法 new
 function Shape:new( o, side )
-    print('4444444444', o, side)
     o = o or {}
-    print('33333333333', o, side)
     setmetatable(o, self)
     self.__index = self
     side = side or 0
