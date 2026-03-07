@@ -175,8 +175,7 @@ print(string.rep("*", 50))
 print('---------------------------------------------------------------------------------------------------------------')
 -- 一个简单的面向对象实现
 --[[
-Lua 中使用":"实现面向对象方式的调用。":"只是语法糖，它同时在方法的声明与实现中增加了一个
-名为 self 的隐藏参数，这个参数就是对象本身。
+    Lua 中使用":"实现面向对象方式的调用。":"只是语法糖，它同时在方法的声明与实现中增加了一个名为 self 的隐藏参数，这个参数就是对象本身。
 ]]
 
 --实例：
@@ -245,7 +244,6 @@ C.__index=C
 function C:new(len, wid, hig)
     local o={}
 
-
     setmetatable(o,C)    --将原始类C作为它对象的原表
 
     o.rectangle=B:new(len,wid)
@@ -260,12 +258,8 @@ print("立方体A的体积为"..cubeA.volume)
 print("立方体B的体积为"..cubeB.volume)
 print("立方体A的体积仍然为"..cubeA.volume..", A与B独立存在")
 
-print("立方体A底面长方体的长与宽分别为"
-,cubeA.rectangle.length
-,cubeA.rectangle.width)
-print("立方体B底面长方体的长与宽分别为"
-,cubeB.rectangle.length
-,cubeB.rectangle.width)
+print("立方体A底面长方体的长与宽分别为" ,cubeA.rectangle.length ,cubeA.rectangle.width)
+print("立方体B底面长方体的长与宽分别为" ,cubeB.rectangle.length ,cubeB.rectangle.width)
 print("cubeA和cubeB的底边长方形同样独立存在")
 print('---------------------------------------------------------------------------------------------------------------')
 --我的实测结果与作者的理论有出入，先创建多个对象，然后再依次输出，会发现结果都是最后一个对象的值。
@@ -292,7 +286,6 @@ local r = Rectangle:new(nil, 2, 3);
 local p = Rectangle:new(nil, 4, 5);
 
 -- 输出
-
 r:printArea();
 p:printArea();
 --结果:
@@ -301,8 +294,8 @@ p:printArea();
 --也就是说，p 和 r 其实不是两个完全无关的对象。
 print('---------------------------------------------------------------------------------------------------------------')
 --回楼上，两个新建实例并没有关系，只是新建实例时修改了元表，第二次新建覆盖了值:
-local Rect = {area = 0,length = 0,windth = 0};
-function Rect:new(length,windth)
+local Rect = {area = 0,length = 0, windth = 0};
+function Rect:new(length, windth)
     local t = {};
     setmetatable(t,self);
     self.__index = self;
@@ -340,11 +333,12 @@ Rectangle = {}
 
 -- 初始化矩形对象
 function Rectangle:new(length, breadth)
+
 -- 创建一个新的对象
 local newObj = {
-length = length or 0,
-breadth = breadth or 0,
-area = 0
+    length = length or 0,
+    breadth = breadth or 0,
+    area = 0
 }
 -- 设置新对象的元表为 Rectangle，以便继承 Rectangle 的方法
 setmetatable(newObj, self)
