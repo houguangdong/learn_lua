@@ -1,5 +1,5 @@
 #!/usr/local/bin/lua
-print('------------------------------------')
+print('------------------------------------基本类型---------------------------------------------------------------------')
 print(type("Hello world"))      --> string
 print(type(10.4*3))             --> number
 print(type(print))              --> function
@@ -7,7 +7,7 @@ print(type(type))               --> function
 print(type(true))               --> boolean
 print(type(nil))                --> nil
 print(type(type(X)))            --> string
-print('------------------------------------')
+print('----------------------------------nil（空）---------------------------------------------------------------------')
 --nil（空）
 --nil 类型表示一种没有任何有效值，它只有一个值 -- nil，例如打印一个没有赋值的变量，便会输出一个 nil 值：
 print(type(a))
@@ -22,14 +22,13 @@ tab1.key1 = nil
 for k, v in pairs(tab1) do
     print(k .. " - " .. v)
 end
-print('------------------------------------')
+print('--------------------------------------nil 作比较时应该加上双引号 "：------------------------------------------------')
 --nil 作比较时应该加上双引号 "：
 print(type(X))
 print(type(X)==nil)
 print(type(X)=="nil")
 --type(X)==nil 结果为 false 的原因是 type(X) 实质是返回的 "nil" 字符串，是一个 string 类型：
-print('------------------------------------')
---boolean（布尔）
+print('--------------------------------------boolean（布尔）------------------------------------------------------------')
 --boolean 类型只有两个可选值：true（真） 和 false（假），Lua 把 false 和 nil 看作是 false，其他的都为 true，数字 0 也是 true:
 print(type(true))
 print(type(false))
@@ -46,8 +45,7 @@ if 0 then
 else
     print("数字 0 为 false")
 end
-print('------------------------------------')
---number（数字）
+print('--------------------------------------number（数字）-------------------------------------------------------------')
 --Lua 默认只有一种 number 类型 -- double（双精度）类型（默认类型可以修改 luaconf.h 里的定义），以下几种写法都被看作是 number 类型：
 print(type(2))
 print(type(2.2))
@@ -55,8 +53,7 @@ print(type(0.2))
 print(type(2e+1))
 print(type(0.2e-1))
 print(type(7.8263692594256e-06))
-print('------------------------------------')
---string（字符串）
+print('--------------------------------------string（字符串）-----------------------------------------------------------')
 --字符串由一对双引号或单引号来表示。
 string1 = "this is string1"
 string2 = 'this is string2'
@@ -85,8 +82,7 @@ print(157 .. 428)
 len = "www.runoob.com"
 print(#len)
 print(#"www.runoob.com")
-print('------------------------------------')
---table（表）
+print('--------------------------------------table（表）---------------------------------------------------------------')
 --在 Lua 里，table 的创建是通过"构造表达式"来完成，最简单构造表达式是{}，用来创建一个空表。也可以在表里添加一些数据，直接初始化表:
 -- 创建一个空的 table
 local tbl1 = {}
@@ -121,8 +117,7 @@ end
 a3["key"] = "val"
 print(a3["key"])
 print(a3["none"])
-print('------------------------------------')
---function（函数）
+print('--------------------------------------function（函数）-----------------------------------------------------------')
 --在 Lua 中，函数是被看作是"第一类值（First-Class Value）"，函数可以存在变量里:
 -- function_test.lua 脚本文件
 function factorial1(n)
@@ -145,11 +140,11 @@ function testFun(tab,fun)
 end
 
 
-tab={key1="val1",key2="val2"};
+tab = {key1="val1", key2="val2"};
 testFun(tab,
-        function(key,val)--匿名函数
-            return key.."="..val;
-        end
+    function(key,val)--匿名函数
+        return key.."="..val;
+    end
 );
 
 --thread（线程）
