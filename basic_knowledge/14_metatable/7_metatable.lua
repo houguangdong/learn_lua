@@ -1,5 +1,6 @@
 #!/usr/local/bin/lua
 
+print('------------------------------------------__index--------------------------------------------------------------')
 text = { }
 text.defaultValue = { size = 14, content = "hello" }
 text.mt = { }  -- 创建元表
@@ -14,10 +15,10 @@ text.mt.__index = function( tb, key )
 end
 
 local x = text.new{ content = "bye" }
-print( x.size , x.content)   --> 14
-print('------------------------------------')
-
---这一部分我们通过一个简单的例子介绍如何使用 metamethods。假定我们使用 table 来描述结合，使用函数来描述集合的并操作，交集操作，like 操作。我们在一个表内定义这些函数，然后使用构造函数创建一个集合：
+print( x.size , x.content)   --> 14 bye
+print('------------------------------------------metamethods(union、intersection)--------------------------------------')
+--这一部分我们通过一个简单的例子介绍如何使用 metamethods。假定我们使用 table 来描述集合，使用函数来描述集合的并操作，交集操作，like 操作。
+--我们在一个表内定义这些函数，然后使用构造函数创建一个集合：
 Set = {}
 Set.mt = {}   --将所有集合共享一个metatable
 function Set.new(t)   --新建一个表
@@ -29,7 +30,7 @@ function Set.new(t)   --新建一个表
     return set
 end
 
-function Set.union(a,b)   --并集
+function Set.union(a, b)   --并集
     local res = Set.new{}  --注意这里是大括号
     for i in pairs(a) do
         res[i] = true
@@ -40,8 +41,8 @@ function Set.union(a,b)   --并集
     return res
 end
 
-function Set.intersection(a,b)   --交集
-    local res = Set.new{}   --注意这里是大括号
+function Set.intersection(a, b)     --交集
+    local res = Set.new{}           --注意这里是大括号
     for i in pairs(a) do
         res[i] = b[i]
     end
@@ -75,22 +76,23 @@ __tostring（tostring函数的行为）、__metatable（对表getmetatable和set
 ]]
 
 Set.mt.__add = Set.union
-s1 = Set.new{1,2}
-s2 = Set.new{3,4}
+s1 = Set.new{1,2,3}
+s2 = Set.new{1,3,4}
 print(getmetatable(s1))
 print(getmetatable(s2))
 s3 = s1 + s2
 Set.print(s3)
-
+print("---------")
 Set.mt.__mul = Set.intersection   --使用相乘运算符来定义集合的交集操作
-Set.print((s1 + s2)*s1)
+Set.print((s1 + s2)*s1) --{1,2,3,4} * {1,2,3}
 
 --如上所示，用表进行了集合的并集和交集操作。
 --Lua 选择 metamethod 的原则：如果第一个参数存在带有 __add 域的 metatable，Lua 使用它作为 metamethod，和第二个参数无关；
 --否则第二个参数存在带有 __add 域的 metatable，Lua 使用它作为 metamethod 否则报错。
-print('------------------------------------')
+print('---------------------------------------------------------------------------------------------------------------')
 --根据 __newindex 的这一个特性，可以用来跟踪一个 table 赋值更新的操作，如果是一个只读的 table ，可以通过 __newindex 来实现下面是代码 lua 中
---__newindex 的调用机制跟 __index 的调用机制是一样的，当访问 table 中一个不存在的 key，并对其赋值的时候，lua 解释器会查找 __newindex 元方法，如果存在，调用该方法，如果不存在，直接对原 table 索引进行赋值操作。
+--__newindex 的调用机制跟 __index 的调用机制是一样的，当访问 table 中一个不存在的 key，并对其赋值的时候，
+--lua 解释器会查找 __newindex 元方法，如果存在，调用该方法，如果不存在，直接对原 table 索引进行赋值操作。
 local t = {}
 local prototype = {}
 local mt = {
@@ -116,7 +118,7 @@ function readOnly(t)
     local proxy = {}  --定义一个空表，访问任何索引都是不存在的，所以会调用__index 和__newindex
     local mt = {
         __index = t, ---__index 可以是函数，也可以是table，是table的话，调用直接返回table的索引值
-        __newindex = function(t,k,v)
+        __newindex = function(t, k, v)
             error("attempt to update a read-only table",2)
         end
     }
@@ -130,16 +132,22 @@ print(days[1])
 --输出：
 --Sunday
 --: attempt to update a read-only table
-print('------------------------------------')
+print('---------------------------------------------------------------------------------------------------------------')
 --__newindex 有两个规则：
 --1、如果 __newindex 是一个函数，则在给 table 中不存在的字段赋值时，会调用这个函数，并且赋值不成功。
---2、如果 __newindex 是一个 table，则在给 table 中不存在的字段赋值时，会直接给 __newindex的table 赋值。
-print('------------------------------------')
+--2、如果 __newindex 是一个table，则在给 table 中不存在的字段赋值时，会直接给 __newindex的table 赋值。
+print('-------------------------------------这个是两个集合操作完的差集合----------------------------------------------------')
 --参考二楼的写法可以再加一个差集：
-function Set.diff(a,b)
+function Set.diff(a,b)  --a = {1,2,3} b={1,3,4}
     local res = Set.new{}
-    local unionRes = a + b
-    local intersectionRes = a * b
+    local unionRes = a + b  --1,2,3,4
+    --for k in pairs(unionRes) do
+    --    print(k)
+    --end
+    local intersectionRes = a * b   --1,3
+    --for k in pairs(intersectionRes) do
+    --    print(k)
+    --end
     for i in pairs(unionRes)
     do
         if (intersectionRes[i]==nil)
@@ -149,11 +157,13 @@ function Set.diff(a,b)
     end
     return res
 end
-print('------------------------------------')
+Set.mt.__sub = Set.diff
+print(Set.print(s1 - s2))
+print('--------------------------------------下面的差集对----------------------------------------------------------------')
 --参考楼上写法，给出另一种差集实现：
 function Set.sub(a,b)
     local res = Set.new({})
-    for k,v in pairs(a)
+    for k, v in pairs(a)
     do
         if(b[k] == nil)
         then
@@ -162,4 +172,6 @@ function Set.sub(a,b)
     end
     return res
 end
-print('------------------------------------')
+Set.mt.__sub = Set.sub
+print(Set.print(s1 - s2))
+print('---------------------------------------------------------------------------------------------------------------')

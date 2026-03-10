@@ -2,7 +2,7 @@
 
 --__tostring 元方法
 --__tostring 元方法用于修改表的输出行为。以下实例我们自定义了表的输出内容：
---实例
+
 mytable = setmetatable({ 10, 20, 30 }, {
     __tostring = function(mytable)
         sum = 0

@@ -9,9 +9,10 @@
 --基本语法
 --协同程序由 coroutine 模块提供支持。
 --
---使用协同程序，你可以在函数中使用 coroutine.create 创建一个新的协同程序对象，并使用 coroutine.resume 启动它的执行。协同程序可以通过调用 coroutine.yield 来主动暂停自己的执行，并将控制权交还给调用者。
+--使用协同程序，你可以在函数中使用 coroutine.create 创建一个新的协同程序对象，并使用 coroutine.resume 启动它的执行。
+--协同程序可以通过调用 coroutine.yield 来主动暂停自己的执行，并将控制权交还给调用者。
 --方法	                描述
---coroutine.create()	创建 coroutine，返回 coroutine， 参数是一个函数，当和 resume 配合使用的时候就唤醒函数调用
+--coroutine.create()	创建 coroutine，返回 coroutine，参数是一个函数，当和 resume 配合使用的时候就唤醒函数调用
 --coroutine.resume()	重启 coroutine，和 create 配合使用
 --coroutine.yield()	    挂起 coroutine，将 coroutine 设置为挂起状态，这个和 resume 配合使用能有很多有用的效果
 --coroutine.status()	查看 coroutine 的状态
@@ -22,7 +23,9 @@ print('------------------------------------')
 --以下实例演示了如何使用 Lua 协同程序：
 function foo()
     print("协同程序 foo 开始执行")
+    print('111111111111')
     local value = coroutine.yield("暂停 foo 的执行")
+    print('222222222222')
     print("协同程序 foo 恢复执行，传入的值为: " .. tostring(value))
     print("协同程序 foo 结束执行")
 end
@@ -31,7 +34,7 @@ end
 local co = coroutine.create(foo)
 
 -- 启动协同程序
-local status, result = coroutine.resume(co)
+local status, result = coroutine.resume(co) --重启 coroutine，和 create 配合使用
 print(result) -- 输出: 暂停 foo 的执行
 
 -- 恢复协同程序的执行，并传入一个值
@@ -39,8 +42,10 @@ status, result = coroutine.resume(co, 42)
 print(result) -- 输出: 协同程序 foo 恢复执行，传入的值为: 42
 
 --以上实例中，我们定义了一个名为 foo 的函数作为协同程序。在函数中，我们使用 coroutine.yield 暂停了协同程序的执行，并返回了一个值
---。在主程序中，我们使用 coroutine.create 创建了一个协同程序对象，并使用 coroutine.resume 启动了它的执行。
---在第一次调用 coroutine.resume 后，协同程序执行到 coroutine.yield 处暂停，并将值返回给主程序。然后，我们再次调用 coroutine.resume，并传入一个值作为协同程序恢复执行时的参数。
+--在主程序中，我们使用 coroutine.create 创建了一个协同程序对象，并使用 coroutine.resume 启动了它的执行。
+--在第一次调用 coroutine.resume 后，协同程序执行到 coroutine.yield 处暂停，并将值返回给主程序。
+--然后，我们再次调用 coroutine.resume，并传入一个值作为协同程序恢复执行时的参数。
+--
 --执行以上代码输出结果为：
 --    协同程序 foo 开始执行
 --    暂停 foo 的执行
