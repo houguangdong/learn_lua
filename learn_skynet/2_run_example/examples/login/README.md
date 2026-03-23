@@ -1,0 +1,9 @@
+从gated发送请求到msgagent去处理ack、login、logout去处理消息
+从gated发送请求到logind去处理login、logout去处理消息
+gated启动msgserver服务
+login启动login服务
+msgagent注册消息路由处理请求
+
+main负责启动logind服务、gated服务。启动gate服务去接收客户端的请求。
+
+client是测试发送消息的封装
