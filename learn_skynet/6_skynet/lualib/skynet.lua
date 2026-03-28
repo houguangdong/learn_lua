@@ -98,11 +98,234 @@ do ---- avoid session rewind conflict
     end
 
     -- in dangerzone, we should check if the next session already exist.
+    local function checkconflict(session)
+        if session == nil then
+            return
+        end
+        local next_session = session + 1
+        if next_session > dangerzone_up then
+            -- leave dangerzone
+            reset_dangerzone(session)
+            assert(next_session > dangerzone_up)
+            set_checkrewind()
+        else
+            while true do
+                if not dangerzone[next_session] then
+                    break
+                end
+                if not session_id_coroutine[next_session] then
+                    reset_dangerzone(session)
+                    break
+                end
+                -- skip the session already exist.
+                next_session = c.genid() + 1
+            end
+        end
+        -- session will rewind after 0x7fffffff
+        if next_session == 0x80000000 and dangerzone[1] then
+            assert(c.genid() == 1)
+            return checkconflict(1)
+        end
+    end
 
+    local function auxsend_checkconflict(addr, proto, msg, sz)
+        local session = csend(addr, proto, nil, msg, sz)
+        checkconflict(session)
+        return session
+    end
+
+    local function auxtimeout_checkconflict(timeout)
+        local session = cintcommand("TIMEOUT", timeout)
+        checkconflict(session)
+        return session
+    end
+
+    local function auxwait_checkconflict()
+        local session = c.genid()
+        checkconflict(session)
+        return session
+    end
+
+    local function auxsend_checkrewind(addr, proto, msg, sz)
+        local session = csend(addr, proto, nil, msg, sz)
+        if session and session > dangerzone_low and session <= dangerzone_up then
+            -- enter dangerzone
+            set_checkconflict(session)
+        end
+        return session
+    end
+
+    local function auxtimeout_checkrewind(timeout)
+        local session = cintcommand("TIMEOUT", timeout)
+        if session and session > dangerzone_low and session <= dangerzone_up then
+            -- enter dangerzone
+            set_checkconflict(session)
+        end
+        return session
+    end
+
+    local function auxwait_checkrewind()
+        local session = c.genid()
+        if session > dangerzone_low and session <= dangerzone_up then
+            -- enter dangerzone
+            set_checkconflict(session)
+        end
+        return session
+    end
+
+    set_checkrewind = function()
+        auxsend = auxsend_checkrewind
+        auxtimeout = auxtimeout_checkrewind
+        auxwait = auxwait_checkrewind
+    end
+
+    set_checkconflict = function(session)
+        reset_dangerzone(session)
+        auxsend = auxsend_checkconflict
+        auxtimeout = auxtimeout_checkconflict
+        auxwait = auxwait_checkconflict
+    end
+
+    -- in safezone at the beginning
+    set_checkrewind()
 end
 
 do ---- request/select
+    local function send_requests(self)
+        local sessions = {}
+        self._sessions = sessions
+        local request_n = 0
+        local err
+        for i = 1, #self do
+            local req = self[i]
+            local addr = req[1]
+            local p = proto[req[2]]
+            assert(p.unpack)
+            local tag = session_coroutine_tracetag[running_thread]
+            if tag then
+                c.trace(tag, "call", 4)
+                c.send(addr, skynet.PTYPE_TRACE, 0, tag)
+            end
+            local session = auxsend(addr, p.id, p.pack(tunpack(req, 3, req.n)))
+            if session == nil then
+                err = err or {}
+                err[#err+1] = req
+            else
+                sessions[session] = req
+                watching_session[session] = addr
+                session_id_coroutine[session] = self._thread
+                request_n = request_n + 1
+            end
+        end
+        self.request_n = request_n
+        return err
+    end
 
+    local function request_thread(self)
+        while true do
+            local succ, msg, sz, session = coroutine_yield "SUSPEND"
+            if session == self._timeout then
+                self._timeout = nil
+                self.timeout = true
+            else
+                watching_session[session] = nil
+                local req = self._sessions[session]
+                local p = proto[req[2]]
+                if succ then
+                    self._resp[session] = tpack(p.unpack(msg, sz))
+                else
+                    self._resp[session] = false
+                end
+            end
+            skynet.wakeup(self)
+        end
+    end
+
+    local function request_iter(self)
+        return function()
+            if self._error then
+                -- invalid address
+                local e = tremove(self._error)
+                if e then
+                    return e
+                end
+                self._error = nil
+            end
+            local session, resp = next(self._resp)
+            if session == nil then
+                if self._request == 0 then
+                    return
+                end
+                if self.timeout then
+                    return
+                end
+                skynet.wait(self)
+                if self.timeout then
+                    return
+                end
+                session, resp = next(self._resp)
+            end
+
+            self._request = self._request - 1
+            local req = self._sessions[session]
+            self._resp[session] = nil
+            self._sessions[session] = nil
+            return req, resp
+        end
+    end
+
+    local request_meta = {}; request_meta.__index = request_meta
+
+    function request_meta:add(obj)
+        assert(type(obj) == "table" and not self._thread)
+        self[#self + 1] = obj
+        return self
+    end
+
+    request_meta.__call = request_meta.add
+
+    function request_meta:close()
+        if self._request > 0 then
+            local resp = self._resp
+            for session, req in pairs(self._sessions) do
+                if not resp[session] then
+                    session_id_coroutine[session] = "BREAK"
+                    watching_session[session] = nil
+                end
+            end
+            self._request = 0
+        end
+        if self._timeout then
+            session_id_coroutine[self._timeout] = "BREAK"
+            self._timeout = nil
+        end
+    end
+
+    request_meta.__close = request_meta.close
+
+    function request_meta:select(timeout)
+        assert(self._thread == nil)
+        self._thread = coroutine_create(request_thread)
+        self._error = send_requests(self)
+        self._resp = {}
+        if timeout then
+            self._timeout = auxtimeout(timeout)
+            session_id_coroutine[self._timeout] = self._thread
+        end
+
+        local running = running_thread
+        coroutine_resume(self._thread, self)
+        running_thread = running
+        return request_iter(self), nil, nil, self
+    end
+
+    function skynet.request(obj)
+        local ret = setmetatable({}, request_meta)
+        if obj then
+            return ret[obj]
+        end
+        return ret
+    end
 end
 
 -- suspend is function
@@ -111,7 +334,267 @@ local suspend
 ----- monitor exit
 
 local function dispatch_error_queue()
+    local session = tremove(error_queue, 1)
+    if session then
+        local co = session_id_coroutine[session]
+        session_id_coroutine[session] = nil
+        return suspend(co, coroutine_resume(co, false, nil, nil, session))
+    end
+end
 
+local function _error_dispatch(error_session, error_source)
+    skynet.ignoreret() -- don't return for error
+    if error_session == 0 then
+        -- error_source is down, clear unreponse set
+        for resp, address in pairs(unresponse) do
+            if error_source == address then
+                unresponse[resp] = nil
+            end
+        end
+        for session, srv in pairs(watching_session) do
+            if srv == error_source then
+                tinsert(error_queue, session)
+            end
+        end
+    else
+        -- capture an error for error_session
+        if watching_session[error_session] then
+            tinsert(error_queue, error_session)
+        end
+    end
+end
+
+-- coroutine reuse
+
+local coroutine_pool = setmetatable({}, { __mode = "kv" })
+
+local function co_create(f)
+    local co = tremove(coroutine_pool)
+    if co == nil then
+        co = coroutine_create(function(...)
+            f(...)
+            while true do
+                local session = session_coroutine_id[co]
+                if session and session ~= 0 then
+                    local source = debug.getinfo(f, "S")
+                    skynet.error(string.format("Maybe forgot response session %s from %s : %s:%d",
+                        session,
+                        skynet.address(session_coroutine_address[co]),
+                        source.source, source.linedefined))
+                end
+                -- coroutine exit
+                local tag = session_coroutine_tracetag[co]
+                if tag ~= nil then
+                    if tag then c.trace(tag, "end") end
+                    session_coroutine_tracetag[co] = nil
+                end
+                local address = session_coroutine_address[co]
+                if address then
+                    session_coroutine_id[co] = nil
+                    session_coroutine_address[co] = nil
+                end
+
+                -- recycle co into pool
+                f = nil
+                coroutine_pool[#coroutine_pool + 1] = co
+                -- recv new main function f
+                f = coroutine_yield "SUSPEND"
+                f(coroutine_yield())
+            end
+        end)
+    else
+        -- pass the main function f to coroutine, and restore running thread
+        local running = running_thread
+        coroutine_resume(co, f)
+        running_thread = running
+    end
+    return co
+end
+
+local function dispatch_wakeup()
+    while true do
+        local token = tremove(wakeup_queue, 1)
+        if token then
+            local session = sleep_session[token]
+            if session then
+                local co = session_id_coroutine[session]
+                local tag = session_coroutine_tracetag[co]
+                if tag then c.trace(tag, "resume") end
+                session_id_coroutine[session] = "BREAK"
+                return suspend(co, coroutine_resume(co, false, "BREAK", nil, session))
+            end
+        else
+            break
+        end
+    end
+    return dispatch_error_queue()
+end
+
+-- suspend is local function
+function suspend(co, result, command)
+    if not result then
+        local session = session_coroutine_id[co]
+        if session then -- coroutine may fork by others (session is nil)
+            local addr = session_coroutine_address[co]
+            if session ~= 0 then
+                -- only call response error
+                local tag = session_coroutine_tracetag[co]
+                if tag then c.trace(tag, "error") end
+                c.send(addr, skynet.PTYPE_ERROR, session, "")
+            end
+            session_coroutine_id[co] = nil
+        end
+        session_coroutine_address[co] = nil
+        session_coroutine_tracetag[co] = nil
+        skynet.fork(function() end) -- trigger command "SUSPEND"
+        local tb = traceback(co, tostring(command))
+        coroutine.close(co)
+        error(tb)
+    end
+    if command == "SUSPEND" then
+        return dispatch_wakeup()
+    elseif command == "QUIT" then
+        coroutine.close(co)
+        -- service exit
+        return
+    elseif command == "USER" then
+        -- See skynet.coutine for detail
+        error("Call skynet.coroutine.yield out of skynet.coroutine.resume\n" .. traceback(co))
+    elseif command == nil then
+        -- debug trace
+        return
+    else
+        error("Unknown command : " .. command .. "\n" .. traceback(co))
+    end
+end
+
+local co_create_for_timeout
+local timeout_traceback
+
+function skynet.trace_timeout(on)
+    local function trace_coroutine(func, ti)
+        local co
+        co = co_create(function()
+            timeout_traceback[co] = nil
+            func()
+        end)
+        local info = string.format("TIMER %d+%d : ", skynet.now(), ti)
+        timeout_traceback[co] = traceback(info, 3)
+        return co
+    end
+    if on then
+        timeout_traceback = timeout_traceback or {}
+        co_create_for_timeout = trace_coroutine
+    else
+        timeout_traceback = nil
+        co_create_for_timeout = co_create
+    end
+end
+
+skynet.trace_timeout(false) -- turn off by default
+
+function skynet.timeout(ti, func)
+    local session = auxtimeout(ti)
+    assert(session)
+    local co = co_create_for_timeout(func, ti)
+    assert(session_id_coroutine[session] == nil)
+    session_id_coroutine[session] = co
+    return co -- for debug
+end
+
+local function suspend_sleep(session, token)
+    local tag = session_coroutine_tracetag[running_thread]
+    if tag then c.trace(tag, "sleep", 2) end
+    session_id_coroutine[session] = running_thread
+    assert(sleep_session[token] == nil, "token duplicative")
+    sleep_session[token] = session
+
+    return coroutine_yield "SUSPEND"
+end
+
+function skynet.sleep(ti, token)
+    local session = auxtimeout(ti)
+    assert(session)
+    token = token or coroutine.running()
+    local succ, ret = suspend_sleep(session, token)
+    sleep_session[token] = nil
+    if succ then
+        return
+    end
+    if ret == "BREAK" then
+        return "BREAK"
+    else
+        error(ret)
+    end
+end
+
+function skynet.yield()
+    return skynet.sleep(0)
+end
+
+function skynet.wait(token)
+    local session = auxwait()
+    token = token or coroutine.running()
+    suspend_sleep(session, token)
+    sleep_session[token] = nil
+    session_id_coroutine[session] = nil
+end
+
+function skynet.killthread(thread)
+    local session
+    if type(thread) == "string" then
+        for k, v in pairs(session_id_coroutine) do
+            local thread_string = tostring(v)
+            if thread_string:find(thread) then
+                session = k
+                break
+            end
+        end
+    else
+        local t = fork_queue.t
+        for i = fork_queue.h, t do
+            if fork_queue[i] == thread then
+                table.move(fork_queue, i + 1, t, i)
+                fork_queue[t] = nil
+                fork_queue.t = t - 1
+                return thread
+            end
+        end
+        for k, v in pairs(session_id_coroutine) do
+            if v == thread then
+                session = k
+                break
+            end
+        end
+    end
+    local co = session_id_coroutine[session]
+    if co == nil then
+        return
+    end
+    local addr = session_coroutine_address[co]
+    if addr then
+        session_coroutine_address[co] = nil
+        session_coroutine_tracetag[co] = nil
+        local session = session_coroutine_id[co]
+        if session > 0 then
+            c.send(addr, skynet.PTYPE_ERROR, session, "")
+        end
+        session_coroutine_id[co] = nil
+    end
+    if watching_session[session] then
+        session_id_coroutine[session] = "BREAK"
+        watching_session[session] = nil
+    else
+        session_id_coroutine[session] = nil
+    end
+    for k, v in pairs(sleep_session) do
+        if v == session then
+            sleep_session[k] = nil
+            break
+        end
+    end
+    coroutine.close(co)
+    return co
 end
 
 function skynet.self()
